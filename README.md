@@ -88,6 +88,11 @@ Windows builds currently have no code-signing certificate and may show SmartScre
 - Windows `x64`: NSIS installer with the matching Linux `x64` runtime bundled for WSL.
 
 The macOS updater manifests are merged so one feed covers both architectures.
-Linux ARM64, Windows ARM64, and mobile builds are not targets of this public
-workflow. The desktop update repository override does not change the CLI's
-release download source; that is configured separately in the application source.
+
+CLI archives: macOS Apple Silicon, Linux x64 and ARM64, and Windows x64 and
+ARM64. Each archive is smoke-tested on its matching platform and architecture;
+publishing waits for every desktop and CLI build. Linux x64 reuses the archive
+built for WSL. Intel Macs receive a desktop installer, not a CLI archive.
+Linux ARM64 and Windows ARM64 desktop installers and mobile builds are not
+included. The CLI's release download source is configured separately in the
+application source.

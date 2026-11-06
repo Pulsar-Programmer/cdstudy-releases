@@ -122,7 +122,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libsecret-1-dev pkg-config imagemagick patchelf
       - name: Build Linux desktop
         run: vp run dist:desktop:artifact --platform linux --target AppImage --arch x64 --build-version "$VERSION"
-      - name: Build Linux runtime for Windows WSL
+      - name: Build Linux x64 CLI and WSL runtime
         run: |
           set -euo pipefail
           node scripts/update-release-package-versions.ts "$VERSION"
@@ -252,8 +252,126 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
+  cli:
+    name: CLI ${{ matrix.platform }} ${{ matrix.arch }}
+    needs: metadata
+    if: needs.metadata.outputs.build == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            platform: mac
+            arch: arm64
+            resource_key: darwin-arm64
+            rust_target: aarch64-apple-darwin
+          - runner: ubuntu-24.04-arm
+            platform: linux
+            arch: arm64
+            resource_key: linux-arm64
+            rust_target: aarch64-unknown-linux-gnu
+          - runner: windows-2025
+            platform: win
+            arch: x64
+            resource_key: win32-x64
+            rust_target: x86_64-pc-windows-msvc
+          - runner: windows-11-arm
+            platform: win
+            arch: arm64
+            resource_key: win32-arm64
+            rust_target: aarch64-pc-windows-msvc
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    env:
+      VERSION: ${{ needs.metadata.outputs.version }}
+      PLATFORM: ${{ matrix.platform }}
+      ARCH: ${{ matrix.arch }}
+      RESOURCE_KEY: ${{ matrix.resource_key }}
+      RUST_TARGET: ${{ matrix.rust_target }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          repository: Pulsar-Programmer/celedus
+          ref: ${{ needs.metadata.outputs.sha }}
+          ssh-key: ${{ secrets.SOURCE_DEPLOY_KEY }}
+          persist-credentials: false
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
+      - uses: ./.github/actions/setup-ci-deps
+        with:
+          install-args: --filter=t3... --filter=@t3tools/web... --filter=@t3tools/scripts... --filter=enceladus...
+      - name: Linux CLI build dependencies
+        if: matrix.platform == 'linux'
+        run: sudo apt-get update && sudo apt-get install -y libsecret-1-dev pkg-config patchelf libatomic1
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          toolchain: stable
+          targets: ${{ matrix.rust_target }}
+      - name: Build CLI and resource monitor
+        run: |
+          set -euo pipefail
+          node scripts/update-release-package-versions.ts "$VERSION"
+          vp run --filter t3 build
+          brand=production
+          if [[ "$VERSION" == *-nightly.* ]]; then brand=nightly; fi
+          node scripts/apply-web-brand-assets.ts "$brand" apps/server/dist/client
+          node apps/server/scripts/cli.ts build-exe
+          cargo build --locked --release --manifest-path native/resource-monitor/Cargo.toml --target "$RUST_TARGET"
+          binary=t3-resource-monitor
+          if [[ "$PLATFORM" == win ]]; then binary+=.exe; fi
+          mkdir -p "$RUNNER_TEMP/cli-resource-monitor/$RESOURCE_KEY"
+          cp "native/resource-monitor/target/$RUST_TARGET/release/$binary" "$RUNNER_TEMP/cli-resource-monitor/$RESOURCE_KEY/"
+      - name: Import macOS CLI signing certificate
+        if: matrix.platform == 'mac'
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$CSC_LINK" ]]; then
+            echo '::warning::No Apple certificate configured; the CLI will be signed ad hoc.'
+            exit 0
+          fi
+          : "${CSC_KEY_PASSWORD:?Missing certificate password}"
+          keychain="$RUNNER_TEMP/cli-signing.keychain-db"
+          password="$(openssl rand -hex 16)"
+          echo "::add-mask::$password"
+          printf '%s' "$CSC_LINK" | base64 -D > "$RUNNER_TEMP/cli-signing.p12"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          security import "$RUNNER_TEMP/cli-signing.p12" -k "$keychain" -P "$CSC_KEY_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$password" "$keychain" >/dev/null
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          identity="$(security find-identity -v -p codesigning "$keychain" | sed -n 's/.*"\(Developer ID Application: [^"]*\)".*/\1/p' | head -n 1)"
+          test -n "$identity"
+          echo "CDSTUDY_CLI_MAC_SIGN_IDENTITY=$identity" >> "$GITHUB_ENV"
+          if [[ -n "$APPLE_API_KEY" ]]; then
+            key="$RUNNER_TEMP/AuthKey_${APPLE_API_KEY_ID}.p8"
+            printf '%s' "$APPLE_API_KEY" > "$key"
+            echo "APPLE_API_KEY=$key" >> "$GITHUB_ENV"
+            echo "APPLE_API_KEY_ID=$APPLE_API_KEY_ID" >> "$GITHUB_ENV"
+            echo "APPLE_API_ISSUER=$APPLE_API_ISSUER" >> "$GITHUB_ENV"
+          fi
+      - name: Package and smoke-test CLI archive
+        run: |
+          set -euo pipefail
+          node scripts/build-cli-archive.ts --platform "$PLATFORM" --arch "$ARCH" --version "$VERSION" --resource-monitor-dir "$RUNNER_TEMP/cli-resource-monitor" --output-dir release-cli
+          node scripts/smoke-cli-archive.ts --archive release-cli/* --expect-version "$VERSION"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: downloads-cli-${{ matrix.platform }}-${{ matrix.arch }}
+          path: release-cli/*
+          retention-days: 1
+          if-no-files-found: error
+
   publish:
-    needs: [metadata, linux, desktop]
+    needs: [metadata, linux, desktop, cli]
     if: github.event_name != 'workflow_dispatch' || inputs.publish
     runs-on: ubuntu-24.04
     permissions:
@@ -290,6 +408,11 @@ jobs:
           [[ "$CHANNEL" != nightly ]] || channel=nightly
           node scripts/merge-update-manifests.ts --platform mac "release-assets/$channel-mac.yml" "release-assets/$channel-mac-x64.yml"
           rm "release-assets/$channel-mac-x64.yml"
+          for key in darwin-arm64 linux-x64 linux-arm64 win32-x64 win32-arm64; do
+            extension=tar.gz
+            if [[ "$key" == win32-* ]]; then extension=zip; fi
+            test -s "release-assets/t3-$VERSION-$key.$extension"
+          done
           (cd release-assets && sha256sum * > SHA256SUMS)
       - name: Publish complete release
         run: |
