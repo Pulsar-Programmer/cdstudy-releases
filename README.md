@@ -9,6 +9,12 @@ repository. This public repository contains the desktop release workflow,
 build logs, packaged artifacts, and releases. It does not build the hosted web
 app or mobile clients.
 
+## Skills
+
+Browse the study skills that ship with Cd Study in [skills/](./skills/README.md).
+Add them to Claude Code, Codex, or other agents with
+`npx skills add Pulsar-Programmer/cdstudy-releases`.
+
 ## Build and publish
 
 Open [Actions → Desktop release → Run workflow](https://github.com/Pulsar-Programmer/cdstudy-releases/actions/workflows/release.yml).
