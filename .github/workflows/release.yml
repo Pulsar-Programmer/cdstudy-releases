@@ -31,9 +31,15 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  CDSTUDY_DESKTOP_UPDATE_REPOSITORY: Pulsar-Programmer/cdstudy-releases
+  CDSTUDY_SUPABASE_URL: ${{ vars.CDSTUDY_SUPABASE_URL }}
+  CDSTUDY_SUPABASE_PUBLISHABLE_KEY: ${{ vars.CDSTUDY_SUPABASE_PUBLISHABLE_KEY }}
+  CDSTUDY_CELEDUS_SITE_URL: https://celedus.app
+  CDSTUDY_TELEMETRY_ENABLED: "false"
+  # Older source refs still consume T3CODE_*; keep these until they are retired.
   T3CODE_DESKTOP_UPDATE_REPOSITORY: Pulsar-Programmer/cdstudy-releases
-  T3CODE_SUPABASE_URL: ${{ vars.T3CODE_SUPABASE_URL }}
-  T3CODE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.T3CODE_SUPABASE_PUBLISHABLE_KEY }}
+  T3CODE_SUPABASE_URL: ${{ vars.CDSTUDY_SUPABASE_URL }}
+  T3CODE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.CDSTUDY_SUPABASE_PUBLISHABLE_KEY }}
   T3CODE_CELEDUS_SITE_URL: https://celedus.app
   T3CODE_TELEMETRY_ENABLED: "false"
 
@@ -215,8 +221,10 @@ jobs:
             profile="$RUNNER_TEMP/cdstudy.provisionprofile"
             printf '%s' "$MACOS_PROVISIONING_PROFILE" | base64 -D > "$profile"
             security cms -D -i "$profile" >/dev/null
-            export T3CODE_APPLE_TEAM_ID="$APPLE_TEAM_ID"
-            export T3CODE_MACOS_PROVISIONING_PROFILE="$profile"
+            export CDSTUDY_APPLE_TEAM_ID="$APPLE_TEAM_ID"
+            export CDSTUDY_MACOS_PROVISIONING_PROFILE="$profile"
+            export T3CODE_APPLE_TEAM_ID="$CDSTUDY_APPLE_TEAM_ID"
+            export T3CODE_MACOS_PROVISIONING_PROFILE="$CDSTUDY_MACOS_PROVISIONING_PROFILE"
             args+=(--signed)
           elif [[ "$PLATFORM" == mac ]]; then
             echo '::warning::No Apple certificate configured; this build is unsigned.'

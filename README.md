@@ -39,14 +39,15 @@ schedule, build targets, and publication steps are separate.
 
 ## Configuration and the Cd Study refactor
 
-The current source checkout is being refactored from `T3CODE_*` environment
-variables to `CDSTUDY_*`. At the time of this README update, that rename is still
-uncommitted: GitHub's private source `main` and this public release workflow
-still use the old names. Use the names accepted by the selected **source_ref**.
-Before building a refactored source ref, align the workflow exports and repository
-variables with the following names:
+The release workflow exports `CDSTUDY_*` environment variables for the refactored
+source. It also exports the former `T3CODE_*` names so older source refs, including
+refs from before the rename, can still build with the same configuration.
 
-| Existing workflow name | Refactored source name | Purpose |
+The two Supabase repository variables are `CDSTUDY_SUPABASE_URL` and
+`CDSTUDY_SUPABASE_PUBLISHABLE_KEY`. The workflow maps them to both source naming
+schemes; maintain their values under the new names.
+
+| Legacy source name | Current source name | Purpose |
 | --- | --- | --- |
 | `T3CODE_SUPABASE_URL` | `CDSTUDY_SUPABASE_URL` | Supabase project URL for Celedus sign-in |
 | `T3CODE_SUPABASE_PUBLISHABLE_KEY` | `CDSTUDY_SUPABASE_PUBLISHABLE_KEY` | Publishable or legacy anon key only |
@@ -56,11 +57,9 @@ variables with the following names:
 | `T3CODE_APPLE_TEAM_ID` | `CDSTUDY_APPLE_TEAM_ID` | Apple team ID passed to the packager |
 | `T3CODE_MACOS_PROVISIONING_PROFILE` | `CDSTUDY_MACOS_PROVISIONING_PROFILE` | Decoded provisioning profile path passed to the packager |
 
-The workflow currently reads the two Supabase values from repository variables.
-Renaming those variables alone does not update the workflow's `vars.*` references
-or its exported environment names. The Apple repository variable remains
-`APPLE_TEAM_ID`, and the profile secret remains `MACOS_PROVISIONING_PROFILE`;
-only their exports to the source packager change.
+The Apple repository variable remains `APPLE_TEAM_ID`, and the profile secret
+remains `MACOS_PROVISIONING_PROFILE`. The workflow exports the team ID and decoded
+profile path under both naming schemes before invoking the source packager.
 
 The refactored source uses `CDSTUDY_HOME` with a default data directory of
 `~/.cdstudy`, and the desktop application ID is `app.celedus.study`. The CLI
