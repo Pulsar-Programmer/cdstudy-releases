@@ -19,8 +19,8 @@ Add them to Claude Code, Codex, or other agents with
 
 Open [Actions → Desktop release → Run workflow](https://github.com/Pulsar-Programmer/cdstudy-releases/actions/workflows/release.yml).
 
-- **source_ref** selects a branch, tag, or commit in the private source repository
-  (default `main`). Every build in the run uses the same resolved source commit.
+- Every release, stable or nightly, builds the current tip of the private source
+  repository's `main`. Push everything you want released to `main` first.
 - **nightly** derives the next patch version from the source desktop package,
   with a `-nightly.YYYYMMDD.RUN_NUMBER` suffix.
 - **stable** requires an explicit version such as `0.1.7`.
@@ -31,9 +31,8 @@ Open [Actions → Desktop release → Run workflow](https://github.com/Pulsar-Pr
   Nightlies are prereleases; stable releases become latest. Release notes record
   the private source commit.
 
-Tag-triggered stable releases use matching tags in both repositories: tag the
-private source first, then push the same `vX.Y.Z` tag here. The workflow checks
-out that private tag and publishes the matching version.
+Pushing a `vX.Y.Z` tag here starts a stable release of that version, built from
+the tip of `main` in the private source repository.
 
 Nightlies run daily at 06:17 UTC when the repository variable `NIGHTLY_ENABLED`
 is `true`. They skip commits already present in a published nightly. Leave this
